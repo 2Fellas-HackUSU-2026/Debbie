@@ -1,5 +1,5 @@
 {
-    "company_name": "The name of the company",
-    "specific_override": "Override for this specific cell",
-    "table_column_value": "Values for column 1"
+    "job_steps": "store each step for the job",
+    "potential_hazards": "Storing job hazards",
+    "hazard controls": "header for the hazard controls field"
 }
