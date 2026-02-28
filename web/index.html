@@ -122,9 +122,10 @@
 
         /* Suggestion Badge */
         .ai-suggestion-badge {
-            position: absolute;
-            top: -10px;
-            right: -10px;
+            display: inline-flex;
+            align-items: center;
+            vertical-align: middle;
+            margin-left: 8px;
             background-color: #f59e0b;
             color: white;
             font-size: 0.65rem;
@@ -553,20 +554,56 @@
             const isShift = e.shiftKey;
 
             if (isShift && lastSelectedId) {
-                // Basic range selection logic (simplified to all elements between)
-                // In a real complex DOM this is tricky, we'll implement a basic version
-                const selectables = Array.from(document.querySelectorAll('.selectable'));
-                const startIdx = selectables.findIndex(el => el.id === lastSelectedId);
-                const endIdx = selectables.findIndex(el => el.id === id);
+                if (!isCtrl) clearSelection();
+                // Ensure the last selected item is still included
+                addToSelection(lastSelectedId);
 
-                if (startIdx !== -1 && endIdx !== -1) {
-                    const min = Math.min(startIdx, endIdx);
-                    const max = Math.max(startIdx, endIdx);
+                // Check if both selections are inside the same table
+                if (lastSelectedId.startsWith('t_') && id.startsWith('t_')) {
+                    const startParts = lastSelectedId.split('_');
+                    const endParts = id.split('_');
 
-                    if (!isCtrl) clearSelection();
+                    if (startParts[1] === endParts[1]) {
+                        // Same table: 2D selection
+                        const tableId = `t_${startParts[1]}`;
+                        const startR = parseInt(startParts[3]);
+                        const startC = parseInt(startParts[5]);
+                        const endR = parseInt(endParts[3]);
+                        const endC = parseInt(endParts[5]);
 
-                    for (let i = min; i <= max; i++) {
-                        addToSelection(selectables[i].id);
+                        const minR = Math.min(startR, endR);
+                        const maxR = Math.max(startR, endR);
+                        const minC = Math.min(startC, endC);
+                        const maxC = Math.max(startC, endC);
+
+                        const table = document.getElementById(tableId);
+                        if (table) {
+                            for (let r = minR; r <= maxR; r++) {
+                                for (let c = minC; c <= maxC; c++) {
+                                    const cell = table.rows[r]?.cells[c];
+                                    if (cell) {
+                                        addToSelection(cell.id);
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Different tables or fallback
+                        addToSelection(id);
+                    }
+                } else {
+                    // Not table cells: Basic DOM range selection
+                    const selectables = Array.from(document.querySelectorAll('.selectable'));
+                    const startIdx = selectables.findIndex(el => el.id === lastSelectedId);
+                    const endIdx = selectables.findIndex(el => el.id === id);
+
+                    if (startIdx !== -1 && endIdx !== -1) {
+                        const min = Math.min(startIdx, endIdx);
+                        const max = Math.max(startIdx, endIdx);
+
+                        for (let i = min; i <= max; i++) {
+                            addToSelection(selectables[i].id);
+                        }
                     }
                 }
             } else if (isCtrl) {
@@ -678,11 +715,10 @@
             aiSuggestions.forEach(s => {
                 const el = document.getElementById(s.id);
                 if (el) {
-                    const badge = document.createElement('div');
+                    const badge = document.createElement('span');
                     badge.className = 'ai-suggestion-badge';
                     badge.innerText = s.suggested_name;
-                    // Add badge to element, but keep it out of the text flow
-                    el.style.position = 'relative';
+                    // For paragraphs or table cells, append inline
                     el.appendChild(badge);
                 }
             });
@@ -715,28 +751,37 @@
         }
 
         function saveConfiguration() {
-            const varName = els.modalVarName.value.trim();
+            const baseVarName = els.modalVarName.value.trim();
             const context = els.modalContext.value.trim();
 
-            if (!varName) {
+            if (!baseVarName) {
                 alert("Variable Name is required.");
                 els.modalVarName.focus();
                 return;
             }
 
+            // Need an array iteration to ensure predictable ordering
+            const elementsArray = Array.from(selectedElements);
+            const isMultiSelect = elementsArray.length > 1;
+            let counter = 1;
+
             // Save for each selected element
-            selectedElements.forEach(id => {
+            elementsArray.forEach(id => {
                 // Check if replacing existing configuration
                 const existingIdx = configuredSelections.findIndex(s => s.id === id);
                 if (existingIdx >= 0) {
                     configuredSelections.splice(existingIdx, 1);
                 }
 
+                const finalVarName = isMultiSelect ? `${baseVarName}_${counter}` : baseVarName;
+
                 configuredSelections.push({
                     id: id,
-                    variable_name: varName,
+                    variable_name: finalVarName,
                     description: context
                 });
+
+                counter++;
 
                 // Apply styling visually to document
                 if (id.includes('_col_')) {
@@ -773,22 +818,29 @@
 
             els.configuredList.innerHTML = '';
 
-            // Group by variable name just for display
+            // Group by variable name just for display. Since we add suffixes, group by the base name.
             const grouped = {};
             configuredSelections.forEach(s => {
-                if (!grouped[s.variable_name]) grouped[s.variable_name] = [];
-                grouped[s.variable_name].push(s);
+                let baseName = s.variable_name;
+                // Basic matching for our generated suffix _N
+                const suffixMatch = baseName.match(/(.*)_(\d+)$/);
+                if (suffixMatch) {
+                    baseName = suffixMatch[1];
+                }
+
+                if (!grouped[baseName]) grouped[baseName] = [];
+                grouped[baseName].push(s);
             });
 
-            Object.keys(grouped).forEach(varName => {
-                const group = grouped[varName];
+            Object.keys(grouped).forEach(baseName => {
+                const group = grouped[baseName];
                 const count = group.length;
 
                 const item = document.createElement('div');
                 item.className = 'bg-white border border-slate-200 rounded p-3 shadow-sm';
                 item.innerHTML = `
                     <div class="flex items-center justify-between mb-1">
-                        <span class="font-mono text-sm text-blue-700 font-semibold truncate" title="${varName}">${varName}</span>
+                        <span class="font-mono text-sm text-blue-700 font-semibold truncate" title="${baseName}">${baseName}${count > 1 ? ' (Group)' : ''}</span>
                         <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">${count} el</span>
                     </div>
                     <p class="text-xs text-slate-500 line-clamp-2" title="${group[0].description || 'No description'}">

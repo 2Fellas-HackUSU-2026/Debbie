@@ -1,5 +1,8 @@
 {
-    "company_name": "The name of the company",
-    "specific_override": "Override for this specific cell",
-    "table_column_value": "Values for column 1"
+    "test_group_1": "Testing suffixes",
+    "test_group_2": "Testing suffixes",
+    "grid_box_1": "2D Grid Test",
+    "grid_box_2": "2D Grid Test",
+    "grid_box_3": "2D Grid Test",
+    "grid_box_4": "2D Grid Test (Field is a checkbox)"
 }
