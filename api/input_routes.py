@@ -5,7 +5,7 @@ from tools.user_input_jinja import add_input
 
 router = APIRouter()
 
-@router.get("/user-input")
+@router.post("/api/user-input")
 def add_item(entry: str):
     """
     Route to add user input to the user input list. User entries should be entered in the order they will eventually be displayed.
