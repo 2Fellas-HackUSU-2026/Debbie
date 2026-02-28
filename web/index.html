@@ -3,223 +3,340 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Doc Parser</title>
+    <title>High-Fidelity Word Template Editor</title>
     <style>
-        body { font-family: sans-serif; margin: 20px; line-height: 1.6; }
-        .container { max-width: 1000px; margin: auto; }
-        .document-view { border: 1px solid #ccc; padding: 20px; background: #f9f9f9; }
-        .paragraph { margin-bottom: 10px; padding: 5px; cursor: pointer; border: 1px solid transparent; }
-        .paragraph:hover { background: #e0e0e0; }
-        .selected { border-color: #007bff; background: #e7f3ff !important; }
-        table { border-collapse: collapse; width: 100%; margin-bottom: 10px; }
-        td { border: 1px solid #ddd; padding: 8px; cursor: pointer; position: relative; }
-        td:hover { background: #e0e0e0; }
-        .col-select { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); cursor: pointer; background: #6c757d; color: white; border-radius: 50%; width: 15px; height: 15px; display: flex; align-items: center; justify-content: center; font-size: 10px; }
-        .col-select:hover { background: #343a40; }
-        .badge { background: #ffc107; color: #000; padding: 2px 5px; border-radius: 3px; font-size: 0.8em; margin-left: 5px; }
-        #controls { position: sticky; top: 0; background: white; padding: 10px; border-bottom: 1px solid #ccc; z-index: 100; display: none; }
+        :root {
+            --bg-color: #e2e4e7;
+            --paper-color: #ffffff;
+            --primary-color: #2b579a; /* Word blue */
+            --success-color: #217346; /* Excel green */
+            --border-color: #c8c8c8;
+        }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background-color: var(--bg-color); margin: 0; padding: 0; overflow: hidden; }
+        .app-container { display: flex; flex-direction: column; height: 100vh; }
+
+        /* Toolbar Styling */
+        .toolbar {
+            background: #fff; border-bottom: 1px solid var(--border-color); padding: 8px 20px;
+            display: flex; gap: 10px; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .btn { padding: 6px 14px; border: 1px solid #ccc; border-radius: 3px; cursor: pointer; font-size: 13px; background: #fff; transition: all 0.2s; }
+        .btn:hover { background: #f3f3f3; }
+        .btn-primary { background: var(--primary-color); color: white; border-color: var(--primary-color); }
+        .btn-primary:hover { background: #1e3e6d; }
+        .btn-success { background: var(--success-color); color: white; border-color: var(--success-color); }
+        .btn-success:hover { background: #1a5c38; }
+
+        /* Main Workspace */
+        .workspace { flex: 1; display: flex; overflow: hidden; }
+        .main-content { flex: 1; overflow-y: auto; padding: 40px; display: flex; flex-direction: column; align-items: center; }
+
+        .word-page {
+            width: 816px; /* 8.5in at 96dpi */
+            background: var(--paper-color);
+            min-height: 1056px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.2);
+            padding: 96px; /* 1in margin */
+            box-sizing: border-box;
+            position: relative;
+            color: #000;
+        }
+
+        /* Elements Rendering */
+        .selectable { cursor: pointer; position: relative; }
+        .selectable:hover { outline: 1px dashed var(--primary-color); background: rgba(43, 87, 154, 0.05); }
+        .selected { outline: 2px solid var(--primary-color) !important; background: rgba(43, 87, 154, 0.15) !important; }
+        .finalized { background: #dff0d8 !important; outline: 1px solid #d6e9c6 !important; }
+
+        p { margin: 0; min-height: 1.1em; line-height: 1.15; font-size: 11pt; }
+        table { border-collapse: collapse; width: 100%; margin: 10px 0; border: 1px solid #000; }
+        td { border: 1px solid #000; padding: 2px 4px; vertical-align: top; position: relative; }
+
+        /* Column Selector */
+        .col-handle {
+            position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
+            width: 20px; height: 20px; background: #fff; border: 1px solid #ccc;
+            display: flex; align-items: center; justify-content: center; font-size: 10px;
+            cursor: pointer; opacity: 0; transition: opacity 0.2s;
+        }
+        td:hover .col-handle { opacity: 1; }
+        .col-handle:hover { background: var(--primary-color); color: white; border-color: var(--primary-color); }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 1000;
+        }
+        .modal { background: #fff; width: 450px; border-radius: 4px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); overflow: hidden; }
+        .modal-header { background: #f3f3f3; padding: 12px 20px; border-bottom: 1px solid #ddd; font-weight: 600; }
+        .modal-body { padding: 20px; }
+        .modal-body label { display: block; margin-bottom: 5px; font-size: 12px; font-weight: 600; color: #666; }
+        .modal-body input, .modal-body textarea { width: 100%; margin-bottom: 15px; padding: 8px; border: 1px solid #ccc; border-radius: 3px; font-family: inherit; box-sizing: border-box; }
+        .modal-footer { background: #f3f3f3; padding: 12px 20px; display: flex; justify-content: flex-end; gap: 10px; }
+
+        .ai-indicator {
+            position: absolute; top: -5px; right: -5px; background: #ffc107; color: #000;
+            font-size: 8px; padding: 1px 3px; border-radius: 2px; font-weight: bold; pointer-events: none;
+        }
+
+        .selection-panel { position: fixed; bottom: 20px; right: 20px; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); display: none; z-index: 500; border: 1px solid #ddd; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Document Gap Finder</h1>
-
-        <div id="upload-section">
-            <input type="file" id="fileInput">
-            <button onclick="uploadFile()">Upload .docx</button>
+    <div class="app-container">
+        <div class="toolbar">
+            <div style="display:flex; align-items: center; gap: 10px;">
+                <div style="background: var(--primary-color); color: white; padding: 4px 8px; border-radius: 3px; font-weight: bold; font-size: 14px;">W</div>
+                <h2 style="margin:0; font-size: 14px; letter-spacing: 0.5px;">Template Designer</h2>
+            </div>
+            <div style="flex-grow: 1;"></div>
+            <input type="file" id="fileInput" style="display:none" onchange="uploadFile()">
+            <button class="btn" onclick="document.getElementById('fileInput').click()">Upload Document</button>
+            <button class="btn btn-success" id="finalizeBtn" onclick="processDocument()" disabled>Finalize Template</button>
         </div>
 
-        <div id="controls">
-            <h3 id="selection-label">Select a region...</h3>
-            <input type="text" id="varName" placeholder="Variable Name (e.g. project_name)">
-            <button onclick="saveSelection()">Mark as Variable</button>
-            <button onclick="processDocument()" style="float: right; background: #28a745; color: white;">Finalize Document</button>
+        <div class="workspace">
+            <div class="main-content">
+                <div id="document-view" class="word-page" style="display:none;"></div>
+                <div id="welcome" style="margin-top: 100px; text-align: center; color: #777;">
+                    <h1>Word Template Assistant</h1>
+                    <p>Identify blanks and define fields with ease.</p>
+                </div>
+            </div>
         </div>
+    </div>
 
-        <div id="document-view" class="document-view" style="display:none;">
-            <!-- Document content will be loaded here -->
+    <div id="selectionPanel" class="selection-panel">
+        <div style="font-size: 13px; margin-bottom: 10px; font-weight: bold;"><span id="selCount">0</span> fields selected</div>
+        <button class="btn btn-primary" onclick="openModal()">Configure Selected</button>
+        <button class="btn" onclick="clearAllSelections()">Clear</button>
+    </div>
+
+    <div id="purposeModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">Configure Template Field</div>
+            <div class="modal-body">
+                <label>Variable Name</label>
+                <input type="text" id="varName" placeholder="e.g. site_location">
+                <label>What is this field intended for?</label>
+                <textarea id="purpose" rows="3" placeholder="Describe what the user should enter here..."></textarea>
+                <label style="display:flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 10px;">
+                    <input type="checkbox" id="isCheckbox" style="width:auto; margin:0;"> This field is a Checkbox
+                </label>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="confirmSelections()">Apply Selection</button>
+            </div>
         </div>
     </div>
 
     <script>
         let currentDocId = null;
-        let selections = [];
-        let currentSelectedId = null;
-        let suggestions = {};
+        let selectedIds = new Set();
+        let finalizedData = [];
+        let suggestions = [];
 
         async function uploadFile() {
-            const fileInput = document.getElementById('fileInput');
-            if (!fileInput.files[0]) return alert("Select a file");
-
+            const file = document.getElementById('fileInput').files[0];
+            if (!file) return;
             const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
-
-            const resp = await fetch('/upload', {
-                method: 'POST',
-                body: formData
-            });
+            formData.append('file', file);
+            const resp = await fetch('/upload', { method: 'POST', body: formData });
             const data = await resp.json();
             currentDocId = data.doc_id;
+            document.getElementById('welcome').style.display = 'none';
             renderDocument(data.structure);
-
-            // Fetch suggestions
-            fetchSuggestions();
+            fetchAISuggestions();
+            document.getElementById('finalizeBtn').disabled = false;
         }
 
-        async function fetchSuggestions() {
+        async function fetchAISuggestions() {
             const resp = await fetch(`/suggest/${currentDocId}`);
             const data = await resp.json();
             suggestions = data.suggestions || [];
-            applySuggestions();
+            suggestions.forEach(s => {
+                const el = document.getElementById(s.id);
+                if (el) {
+                    const ind = document.createElement('div');
+                    ind.className = 'ai-indicator';
+                    ind.innerText = 'AI';
+                    ind.title = "Suggested: " + s.suggested_name;
+                    el.appendChild(ind);
+                }
+            });
         }
 
-        function renderDocument(structure) {
+        function renderDocument(struct) {
             const view = document.getElementById('document-view');
             view.innerHTML = '';
             view.style.display = 'block';
-            document.getElementById('upload-section').style.display = 'none';
-            document.getElementById('controls').style.display = 'block';
 
-            structure.paragraphs.forEach(p => {
-                const div = document.createElement('div');
-                div.className = 'paragraph';
-                div.id = p.id;
-                div.innerText = p.text || "[Empty Paragraph]";
-                div.onclick = () => selectRegion(p.id);
-                view.appendChild(div);
+            struct.paragraphs.forEach(p => {
+                const pEl = document.createElement('p');
+                pEl.id = p.id;
+                pEl.className = 'selectable';
+                pEl.style.textAlign = p.alignment;
+                pEl.onclick = (e) => toggleSelection(p.id, e);
+
+                if (p.runs.length === 0) {
+                    pEl.innerHTML = '&nbsp;';
+                } else {
+                    p.runs.forEach(run => {
+                        const s = document.createElement('span');
+                        s.innerText = run.text;
+                        if (run.bold) s.style.fontWeight = 'bold';
+                        if (run.italic) s.style.fontStyle = 'italic';
+                        if (run.underline) s.style.textDecoration = 'underline';
+                        pEl.appendChild(s);
+                    });
+                }
+                view.appendChild(pEl);
             });
 
-            structure.tables.forEach(t => {
-                const tableContainer = document.createElement('div');
-                tableContainer.style.marginTop = '30px';
+            struct.tables.forEach(t => {
                 const table = document.createElement('table');
                 table.id = t.id;
-
                 t.rows.forEach((row, rIdx) => {
                     const tr = document.createElement('tr');
                     row.forEach((cell, cIdx) => {
                         const td = document.createElement('td');
                         td.id = cell.id;
-                        td.innerText = cell.text || "";
-                        td.onclick = (e) => { e.stopPropagation(); selectRegion(cell.id); };
+                        td.className = 'selectable';
+                        td.onclick = (e) => toggleSelection(cell.id, e);
 
-                        // Add column selector on first row
+                        cell.paragraphs.forEach(p => {
+                            const cp = document.createElement('p');
+                            cp.style.textAlign = p.alignment;
+                            if (p.runs.length === 0) cp.innerHTML = '&nbsp;';
+                            else {
+                                p.runs.forEach(run => {
+                                    const s = document.createElement('span');
+                                    s.innerText = run.text;
+                                    if (run.bold) s.style.fontWeight = 'bold';
+                                    if (run.italic) s.style.fontStyle = 'italic';
+                                    if (run.underline) s.style.textDecoration = 'underline';
+                                    cp.appendChild(s);
+                                });
+                            }
+                            td.appendChild(cp);
+                        });
+
                         if (rIdx === 0) {
-                            const colBtn = document.createElement('div');
-                            colBtn.className = 'col-select';
-                            colBtn.innerText = '↓';
-                            colBtn.title = 'Select entire column';
-                            colBtn.onclick = (e) => {
-                                e.stopPropagation();
-                                selectRegion(`${t.id}_col_${cIdx}`);
-                            };
-                            td.appendChild(colBtn);
+                            const h = document.createElement('div');
+                            h.className = 'col-handle';
+                            h.innerText = '↓';
+                            h.onclick = (e) => { e.stopPropagation(); toggleColumnSelection(t.id, cIdx); };
+                            td.appendChild(h);
                         }
-
                         tr.appendChild(td);
                     });
                     table.appendChild(tr);
                 });
-                tableContainer.appendChild(table);
-                view.appendChild(tableContainer);
+                view.appendChild(table);
             });
         }
 
-        function applySuggestions() {
-            suggestions.forEach(s => {
-                const el = document.getElementById(s.id);
-                if (el) {
-                    const badge = document.createElement('span');
-                    badge.className = 'badge';
-                    badge.innerText = 'Suggested: ' + s.suggested_name;
-                    el.appendChild(badge);
+        function toggleSelection(id, e) {
+            e.stopPropagation();
+            if (selectedIds.has(id)) {
+                selectedIds.delete(id);
+                document.getElementById(id).classList.remove('selected');
+            } else {
+                selectedIds.add(id);
+                document.getElementById(id).classList.add('selected');
+            }
+            updatePanel();
+        }
+
+        function toggleColumnSelection(tId, cIdx) {
+            const colId = `${tId}_col_${cIdx}`;
+            if (selectedIds.has(colId)) {
+                selectedIds.delete(colId);
+                const table = document.getElementById(tId);
+                for(let r of table.rows) r.cells[cIdx].classList.remove('selected');
+            } else {
+                selectedIds.add(colId);
+                const table = document.getElementById(tId);
+                for(let r of table.rows) r.cells[cIdx].classList.add('selected');
+            }
+            updatePanel();
+        }
+
+        function updatePanel() {
+            const panel = document.getElementById('selectionPanel');
+            const count = document.getElementById('selCount');
+            if (selectedIds.size > 0) {
+                panel.style.display = 'block';
+                count.innerText = selectedIds.size;
+            } else {
+                panel.style.display = 'none';
+            }
+        }
+
+        function clearAllSelections() {
+            selectedIds.forEach(id => {
+                if (id.includes('_col_')) {
+                    const [tId, _, cIdx] = id.split('_');
+                    const table = document.getElementById(tId);
+                    for(let r of table.rows) r.cells[cIdx].classList.remove('selected');
+                } else {
+                    const el = document.getElementById(id);
+                    if (el) el.classList.remove('selected');
                 }
             });
+            selectedIds.clear();
+            updatePanel();
         }
 
-        function selectRegion(id) {
-            if (currentSelectedId) {
-                clearSelectionHighlight(currentSelectedId);
+        function openModal() {
+            if (selectedIds.size === 1) {
+                const id = Array.from(selectedIds)[0];
+                const sug = suggestions.find(s => s.id === id);
+                if (sug) document.getElementById('varName').value = sug.suggested_name;
             }
-            currentSelectedId = id;
-            highlightSelection(id);
-            document.getElementById('selection-label').innerText = `Editing: ${id}`;
-
-            // Prefill if there's a suggestion
-            const sug = suggestions.find(s => s.id === id);
-            if (sug) {
-                document.getElementById('varName').value = sug.suggested_name;
-            } else {
-                document.getElementById('varName').value = '';
-            }
+            document.getElementById('purposeModal').style.display = 'flex';
         }
 
-        function highlightSelection(id) {
-            if (id.includes('_col_')) {
-                const parts = id.split('_col_');
-                const tableId = parts[0];
-                const colIdx = parseInt(parts[1]);
-                const table = document.getElementById(tableId);
-                for (let row of table.rows) {
-                    if (row.cells[colIdx]) row.cells[colIdx].classList.add('selected');
-                }
-            } else {
-                const el = document.getElementById(id);
-                if (el) el.classList.add('selected');
-            }
-        }
-
-        function clearSelectionHighlight(id) {
-            if (id.includes('_col_')) {
-                const parts = id.split('_col_');
-                const tableId = parts[0];
-                const colIdx = parseInt(parts[1]);
-                const table = document.getElementById(tableId);
-                for (let row of table.rows) {
-                    if (row.cells[colIdx]) row.cells[colIdx].classList.remove('selected');
-                }
-            } else {
-                const el = document.getElementById(id);
-                if (el) el.classList.remove('selected');
-            }
-        }
-
-        function saveSelection() {
-            const varName = document.getElementById('varName').value;
-            if (!varName) return alert("Enter a variable name");
-
-            selections.push({ id: currentSelectedId, variable_name: varName });
-
-            // Mark as saved
-            if (currentSelectedId.includes('_col_')) {
-                const parts = currentSelectedId.split('_col_');
-                const tableId = parts[0];
-                const colIdx = parseInt(parts[1]);
-                const table = document.getElementById(tableId);
-                for (let row of table.rows) {
-                    if (row.cells[colIdx]) row.cells[colIdx].style.background = '#d4edda';
-                }
-            } else {
-                document.getElementById(currentSelectedId).style.background = '#d4edda';
-            }
-
-            clearSelectionHighlight(currentSelectedId);
-            currentSelectedId = null;
+        function closeModal() {
+            document.getElementById('purposeModal').style.display = 'none';
             document.getElementById('varName').value = '';
-            document.getElementById('selection-label').innerText = 'Select a region...';
+            document.getElementById('purpose').value = '';
+            document.getElementById('isCheckbox').checked = false;
+        }
+
+        function confirmSelections() {
+            const varName = document.getElementById('varName').value;
+            const purpose = document.getElementById('purpose').value;
+            const isCheckbox = document.getElementById('isCheckbox').checked;
+            if (!varName) return alert("Variable Name required");
+
+            let i = 0;
+            selectedIds.forEach(id => {
+                const finalVar = selectedIds.size > 1 ? `${varName}_${i++}` : varName;
+                finalizedData.push({ id, variable_name: finalVar, purpose, is_checkbox: isCheckbox });
+
+                if (id.includes('_col_')) {
+                    const [tId, _, cIdx] = id.split('_');
+                    const table = document.getElementById(tId);
+                    for(let r of table.rows) r.cells[cIdx].classList.add('finalized');
+                } else {
+                    document.getElementById(id).classList.add('finalized');
+                }
+            });
+
+            closeModal();
+            clearAllSelections();
         }
 
         async function processDocument() {
             const resp = await fetch('/process', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ doc_id: currentDocId, selections: selections })
+                body: JSON.stringify({ doc_id: currentDocId, selections: finalizedData })
             });
             const data = await resp.json();
-            alert("Document processed! Mapping saved.");
-            if (data.download_url) {
-                window.location.href = data.download_url;
-            }
+            if (data.download_url) window.location.href = data.download_url;
         }
     </script>
 </body>
