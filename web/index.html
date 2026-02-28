@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Doc Parser</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; line-height: 1.6; }
+        .container { max-width: 1000px; margin: auto; }
+        .document-view { border: 1px solid #ccc; padding: 20px; background: #f9f9f9; }
+        .paragraph { margin-bottom: 10px; padding: 5px; cursor: pointer; border: 1px solid transparent; }
+        .paragraph:hover { background: #e0e0e0; }
+        .selected { border-color: #007bff; background: #e7f3ff !important; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 10px; }
+        td { border: 1px solid #ddd; padding: 8px; cursor: pointer; position: relative; }
+        td:hover { background: #e0e0e0; }
+        .col-select { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); cursor: pointer; background: #6c757d; color: white; border-radius: 50%; width: 15px; height: 15px; display: flex; align-items: center; justify-content: center; font-size: 10px; }
+        .col-select:hover { background: #343a40; }
+        .badge { background: #ffc107; color: #000; padding: 2px 5px; border-radius: 3px; font-size: 0.8em; margin-left: 5px; }
+        #controls { position: sticky; top: 0; background: white; padding: 10px; border-bottom: 1px solid #ccc; z-index: 100; display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Document Gap Finder</h1>
+
+        <div id="upload-section">
+            <input type="file" id="fileInput">
+            <button onclick="uploadFile()">Upload .docx</button>
+        </div>
+
+        <div id="controls">
+            <h3 id="selection-label">Select a region...</h3>
+            <input type="text" id="varName" placeholder="Variable Name (e.g. project_name)">
+            <button onclick="saveSelection()">Mark as Variable</button>
+            <button onclick="processDocument()" style="float: right; background: #28a745; color: white;">Finalize Document</button>
+        </div>
+
+        <div id="document-view" class="document-view" style="display:none;">
+            <!-- Document content will be loaded here -->
+        </div>
+    </div>
+
+    <script>
+        let currentDocId = null;
+        let selections = [];
+        let currentSelectedId = null;
+        let suggestions = {};
+
+        async function uploadFile() {
+            const fileInput = document.getElementById('fileInput');
+            if (!fileInput.files[0]) return alert("Select a file");
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            const resp = await fetch('/upload', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await resp.json();
+            currentDocId = data.doc_id;
+            renderDocument(data.structure);
+
+            // Fetch suggestions
+            fetchSuggestions();
+        }
+
+        async function fetchSuggestions() {
+            const resp = await fetch(`/suggest/${currentDocId}`);
+            const data = await resp.json();
+            suggestions = data.suggestions || [];
+            applySuggestions();
+        }
+
+        function renderDocument(structure) {
+            const view = document.getElementById('document-view');
+            view.innerHTML = '';
+            view.style.display = 'block';
+            document.getElementById('upload-section').style.display = 'none';
+            document.getElementById('controls').style.display = 'block';
+
+            structure.paragraphs.forEach(p => {
+                const div = document.createElement('div');
+                div.className = 'paragraph';
+                div.id = p.id;
+                div.innerText = p.text || "[Empty Paragraph]";
+                div.onclick = () => selectRegion(p.id);
+                view.appendChild(div);
+            });
+
+            structure.tables.forEach(t => {
+                const tableContainer = document.createElement('div');
+                tableContainer.style.marginTop = '30px';
+                const table = document.createElement('table');
+                table.id = t.id;
+
+                t.rows.forEach((row, rIdx) => {
+                    const tr = document.createElement('tr');
+                    row.forEach((cell, cIdx) => {
+                        const td = document.createElement('td');
+                        td.id = cell.id;
+                        td.innerText = cell.text || "";
+                        td.onclick = (e) => { e.stopPropagation(); selectRegion(cell.id); };
+
+                        // Add column selector on first row
+                        if (rIdx === 0) {
+                            const colBtn = document.createElement('div');
+                            colBtn.className = 'col-select';
+                            colBtn.innerText = '↓';
+                            colBtn.title = 'Select entire column';
+                            colBtn.onclick = (e) => {
+                                e.stopPropagation();
+                                selectRegion(`${t.id}_col_${cIdx}`);
+                            };
+                            td.appendChild(colBtn);
+                        }
+
+                        tr.appendChild(td);
+                    });
+                    table.appendChild(tr);
+                });
+                tableContainer.appendChild(table);
+                view.appendChild(tableContainer);
+            });
+        }
+
+        function applySuggestions() {
+            suggestions.forEach(s => {
+                const el = document.getElementById(s.id);
+                if (el) {
+                    const badge = document.createElement('span');
+                    badge.className = 'badge';
+                    badge.innerText = 'Suggested: ' + s.suggested_name;
+                    el.appendChild(badge);
+                }
+            });
+        }
+
+        function selectRegion(id) {
+            if (currentSelectedId) {
+                clearSelectionHighlight(currentSelectedId);
+            }
+            currentSelectedId = id;
+            highlightSelection(id);
+            document.getElementById('selection-label').innerText = `Editing: ${id}`;
+
+            // Prefill if there's a suggestion
+            const sug = suggestions.find(s => s.id === id);
+            if (sug) {
+                document.getElementById('varName').value = sug.suggested_name;
+            } else {
+                document.getElementById('varName').value = '';
+            }
+        }
+
+        function highlightSelection(id) {
+            if (id.includes('_col_')) {
+                const parts = id.split('_col_');
+                const tableId = parts[0];
+                const colIdx = parseInt(parts[1]);
+                const table = document.getElementById(tableId);
+                for (let row of table.rows) {
+                    if (row.cells[colIdx]) row.cells[colIdx].classList.add('selected');
+                }
+            } else {
+                const el = document.getElementById(id);
+                if (el) el.classList.add('selected');
+            }
+        }
+
+        function clearSelectionHighlight(id) {
+            if (id.includes('_col_')) {
+                const parts = id.split('_col_');
+                const tableId = parts[0];
+                const colIdx = parseInt(parts[1]);
+                const table = document.getElementById(tableId);
+                for (let row of table.rows) {
+                    if (row.cells[colIdx]) row.cells[colIdx].classList.remove('selected');
+                }
+            } else {
+                const el = document.getElementById(id);
+                if (el) el.classList.remove('selected');
+            }
+        }
+
+        function saveSelection() {
+            const varName = document.getElementById('varName').value;
+            if (!varName) return alert("Enter a variable name");
+
+            selections.push({ id: currentSelectedId, variable_name: varName });
+
+            // Mark as saved
+            if (currentSelectedId.includes('_col_')) {
+                const parts = currentSelectedId.split('_col_');
+                const tableId = parts[0];
+                const colIdx = parseInt(parts[1]);
+                const table = document.getElementById(tableId);
+                for (let row of table.rows) {
+                    if (row.cells[colIdx]) row.cells[colIdx].style.background = '#d4edda';
+                }
+            } else {
+                document.getElementById(currentSelectedId).style.background = '#d4edda';
+            }
+
+            clearSelectionHighlight(currentSelectedId);
+            currentSelectedId = null;
+            document.getElementById('varName').value = '';
+            document.getElementById('selection-label').innerText = 'Select a region...';
+        }
+
+        async function processDocument() {
+            const resp = await fetch('/process', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ doc_id: currentDocId, selections: selections })
+            });
+            const data = await resp.json();
+            alert("Document processed! Mapping saved.");
+            if (data.download_url) {
+                window.location.href = data.download_url;
+            }
+        }
+    </script>
+</body>
+</html>
