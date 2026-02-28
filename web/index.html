@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debbie - Document Gap Finder</title>
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+
+        /* Document WYSIWYG Styling */
+        .document-view {
+            background: white;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            min-height: 800px;
+            padding: 4rem;
+            margin: 0 auto;
+            max-width: 8.5in; /* Standard US Letter width */
+        }
+
+        .selectable {
+            cursor: pointer;
+            border: 2px solid transparent;
+            border-radius: 4px;
+            transition: all 0.2s ease-in-out;
+            position: relative;
+        }
+
+        .selectable:hover {
+            background-color: #f1f5f9;
+            border-color: #cbd5e1;
+        }
+
+        .selected {
+            background-color: #e0f2fe !important;
+            border-color: #3b82f6 !important;
+        }
+
+        .configured {
+            background-color: #dcfce7;
+            border-color: #22c55e;
+        }
+
+        .configured.selected {
+            background-color: #bbf7d0 !important;
+            border-color: #16a34a !important;
+        }
+
+        /* Checkbox Styling */
+        .checkbox-item {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.25rem;
+            height: 1.25rem;
+            border: 1px solid #94a3b8;
+            border-radius: 0.25rem;
+            margin-right: 0.5rem;
+            background: white;
+            color: transparent;
+        }
+
+        .checkbox-item.checked {
+            background-color: #3b82f6;
+            border-color: #3b82f6;
+            color: white;
+        }
+
+        /* Table Styling */
+        table.doc-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1.5rem;
+        }
+
+        table.doc-table td {
+            border: 1px solid #e2e8f0;
+            padding: 0.5rem;
+            position: relative;
+        }
+
+        .col-select-btn {
+            position: absolute;
+            top: -24px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 20px;
+            height: 20px;
+            background-color: #94a3b8;
+            color: white;
+            border-radius: 9999px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.2s, background-color 0.2s;
+            z-index: 10;
+        }
+
+        table.doc-table td:hover .col-select-btn {
+            opacity: 1;
+        }
+
+        .col-select-btn:hover {
+            background-color: #475569;
+        }
+
+        .col-select-btn.active {
+            opacity: 1;
+            background-color: #3b82f6;
+        }
+
+        /* Suggestion Badge */
+        .ai-suggestion-badge {
+            position: absolute;
+            top: -10px;
+            right: -10px;
+            background-color: #f59e0b;
+            color: white;
+            font-size: 0.65rem;
+            padding: 2px 6px;
+            border-radius: 9999px;
+            font-weight: 600;
+            z-index: 5;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        /* Modal Overlay */
+        #modal-overlay {
+            background-color: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(4px);
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="text-slate-800 h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 shadow-sm px-6 py-4 flex items-center justify-between sticky top-0 z-50">
+        <div class="flex items-center gap-3">
+            <div class="bg-blue-600 text-white p-2 rounded-lg">
+                <i data-lucide="file-text"></i>
+            </div>
+            <h1 class="text-xl font-bold text-slate-900 tracking-tight">Debbie</h1>
+        </div>
+
+        <div id="header-actions" class="hidden flex items-center gap-4">
+            <button id="ai-suggest-btn" class="flex items-center gap-2 bg-amber-100 text-amber-700 hover:bg-amber-200 px-4 py-2 rounded-md font-medium text-sm transition-colors border border-amber-200" onclick="generateSuggestions()">
+                <i data-lucide="sparkles" class="w-4 h-4"></i>
+                <span id="ai-btn-text">AI Suggestions</span>
+            </button>
+            <button class="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-md font-medium text-sm transition-colors shadow-sm" onclick="finalizeDocument()">
+                <i data-lucide="check-circle" class="w-4 h-4"></i>
+                Finalize Document
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Layout -->
+    <main class="flex-1 flex overflow-hidden">
+
+        <!-- Left Sidebar: Controls -->
+        <aside id="sidebar" class="w-80 bg-white border-r border-slate-200 p-6 flex flex-col gap-6 overflow-y-auto hidden">
+            <div class="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                <h3 class="font-semibold text-slate-800 mb-1">Configuration</h3>
+                <p class="text-sm text-slate-500 mb-4">Select text, checkboxes, or table cells to configure fields.</p>
+                <div class="text-xs text-slate-500 flex flex-col gap-2">
+                    <div class="flex items-center gap-2"><kbd class="bg-white border border-slate-300 px-1 rounded shadow-sm text-slate-700 font-mono">Ctrl</kbd> + Click to multi-select</div>
+                    <div class="flex items-center gap-2"><kbd class="bg-white border border-slate-300 px-1 rounded shadow-sm text-slate-700 font-mono">Shift</kbd> + Click for range select</div>
+                </div>
+            </div>
+
+            <div id="selection-panel" class="opacity-50 pointer-events-none transition-opacity">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="font-semibold text-slate-800">Selected Elements</h3>
+                    <span id="selection-count" class="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded-full">0</span>
+                </div>
+
+                <button onclick="openConfigModal()" class="w-full bg-slate-800 hover:bg-slate-900 text-white py-2.5 rounded-md font-medium text-sm transition-colors flex justify-center items-center gap-2">
+                    <i data-lucide="settings-2" class="w-4 h-4"></i>
+                    Configure Fields
+                </button>
+            </div>
+
+            <div id="configured-fields-container" class="mt-4 flex-1">
+                <h3 class="font-semibold text-slate-800 mb-3 border-b border-slate-100 pb-2">Configured Fields</h3>
+                <div id="configured-fields-list" class="flex flex-col gap-2">
+                    <!-- Configured fields will appear here -->
+                    <p class="text-sm text-slate-400 italic">No fields configured yet.</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Center: Document View -->
+        <div class="flex-1 overflow-y-auto bg-slate-100 p-8 relative" id="main-content-area">
+
+            <!-- Upload Section -->
+            <div id="upload-section" class="max-w-xl mx-auto mt-20 bg-white p-10 rounded-xl shadow-sm border border-slate-200 text-center">
+                <div class="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <i data-lucide="upload-cloud" class="w-8 h-8"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-slate-800 mb-2">Upload Document</h2>
+                <p class="text-slate-500 mb-8">Upload a .docx file to start mapping fields and configuring your template.</p>
+
+                <label class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors shadow-sm inline-flex items-center gap-2">
+                    <i data-lucide="file-plus" class="w-5 h-5"></i>
+                    Select .docx File
+                    <input type="file" id="fileInput" class="hidden" accept=".docx" onchange="uploadFile()">
+                </label>
+            </div>
+
+            <!-- Loading Overlay for Upload -->
+            <div id="upload-loading" class="hidden absolute inset-0 bg-slate-100/80 backdrop-blur-sm flex items-center justify-center z-40">
+                <div class="bg-white p-6 rounded-lg shadow-lg flex items-center gap-4">
+                    <i data-lucide="loader-2" class="w-6 h-6 text-blue-600 spinner"></i>
+                    <span class="font-medium text-slate-700">Processing document...</span>
+                </div>
+            </div>
+
+            <!-- Document Container -->
+            <div id="document-view" class="document-view hidden">
+                <!-- Document content rendered here -->
+            </div>
+        </div>
+    </main>
+
+    <!-- Configuration Modal -->
+    <div id="config-modal" class="fixed inset-0 z-[100] hidden items-center justify-center">
+        <div id="modal-overlay" class="absolute inset-0" onclick="closeConfigModal()"></div>
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md relative z-10 overflow-hidden border border-slate-200 transform scale-95 opacity-0 transition-all duration-200" id="modal-content">
+            <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h3 class="font-bold text-slate-800 text-lg flex items-center gap-2">
+                    <i data-lucide="edit-3" class="w-5 h-5 text-blue-600"></i>
+                    Configure Field
+                </h3>
+                <button onclick="closeConfigModal()" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="p-6">
+                <div class="mb-5">
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Variable Name</label>
+                    <input type="text" id="modalVarName" class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="e.g. project_name" autocomplete="off">
+                    <p class="text-xs text-slate-500 mt-1">This will be used as the key in your JSON mapping.</p>
+                </div>
+
+                <div class="mb-2">
+                    <label class="block text-sm font-medium text-slate-700 mb-1">What is this field intended for?</label>
+                    <textarea id="modalContext" class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none h-24" placeholder="Provide context or instructions for this field..."></textarea>
+                </div>
+            </div>
+
+            <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+                <button onclick="closeConfigModal()" class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-md transition-colors">Cancel</button>
+                <button onclick="saveConfiguration()" class="px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow-sm transition-colors">Save Field</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Initialization Scripts -->
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        // Application State
+        let currentDocId = null;
+        let selectedElements = new Set();
+        let lastSelectedId = null; // For shift-click range selection
+        let documentStructure = null;
+        let configuredSelections = []; // { id, variable_name, description, is_column }
+        let aiSuggestions = [];
+
+        // --- DOM Elements ---
+        const els = {
+            uploadSection: document.getElementById('upload-section'),
+            uploadLoading: document.getElementById('upload-loading'),
+            sidebar: document.getElementById('sidebar'),
+            docView: document.getElementById('document-view'),
+            headerActions: document.getElementById('header-actions'),
+            selectionPanel: document.getElementById('selection-panel'),
+            selectionCount: document.getElementById('selection-count'),
+            configuredList: document.getElementById('configured-fields-list'),
+            configModal: document.getElementById('config-modal'),
+            modalContent: document.getElementById('modal-content'),
+            modalVarName: document.getElementById('modalVarName'),
+            modalContext: document.getElementById('modalContext'),
+            aiBtn: document.getElementById('ai-suggest-btn'),
+            aiBtnText: document.getElementById('ai-btn-text'),
+        };
+
+        // --- API Interactions ---
+        async function uploadFile() {
+            const fileInput = document.getElementById('fileInput');
+            if (!fileInput.files[0]) return;
+
+            els.uploadLoading.classList.remove('hidden');
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            try {
+                const resp = await fetch('/upload', { method: 'POST', body: formData });
+                if (!resp.ok) throw new Error('Upload failed');
+
+                const data = await resp.json();
+                currentDocId = data.doc_id;
+                documentStructure = data.structure;
+
+                renderDocument(documentStructure);
+
+                // Switch UI state
+                els.uploadLoading.classList.add('hidden');
+                els.uploadSection.classList.add('hidden');
+                els.docView.classList.remove('hidden');
+                els.sidebar.classList.remove('hidden');
+                els.headerActions.classList.remove('hidden');
+            } catch (err) {
+                console.error(err);
+                alert("Failed to upload document. Ensure it's a valid .docx file.");
+                els.uploadLoading.classList.add('hidden');
+            }
+        }
+
+        async function generateSuggestions() {
+            if (!currentDocId) return;
+
+            // Set loading state
+            els.aiBtn.disabled = true;
+            els.aiBtn.classList.remove('bg-amber-100', 'text-amber-700', 'hover:bg-amber-200');
+            els.aiBtn.classList.add('bg-slate-100', 'text-slate-500');
+            els.aiBtn.innerHTML = `
+                <i data-lucide="loader-2" class="w-4 h-4 spinner"></i>
+                <span>Generating...</span>
+            `;
+            lucide.createIcons();
+
+            try {
+                const resp = await fetch(`/suggest/${currentDocId}`);
+                const data = await resp.json();
+                aiSuggestions = data.suggestions || [];
+
+                applyAiSuggestions();
+
+                // Set success state
+                els.aiBtn.classList.remove('bg-slate-100', 'text-slate-500');
+                els.aiBtn.classList.add('bg-green-100', 'text-green-700');
+                els.aiBtn.innerHTML = `
+                    <i data-lucide="check" class="w-4 h-4"></i>
+                    <span>Suggestions Loaded</span>
+                `;
+                lucide.createIcons();
+
+                // Reset button after 3 seconds
+                setTimeout(() => {
+                    els.aiBtn.disabled = false;
+                    els.aiBtn.classList.remove('bg-green-100', 'text-green-700');
+                    els.aiBtn.classList.add('bg-amber-100', 'text-amber-700', 'hover:bg-amber-200');
+                    els.aiBtn.innerHTML = `
+                        <i data-lucide="sparkles" class="w-4 h-4"></i>
+                        <span>AI Suggestions</span>
+                    `;
+                    lucide.createIcons();
+                }, 3000);
+
+            } catch (err) {
+                console.error(err);
+                alert("Failed to generate AI suggestions.");
+                els.aiBtn.disabled = false;
+            }
+        }
+
+        async function finalizeDocument() {
+            if (!currentDocId) return;
+            if (configuredSelections.length === 0) {
+                const proceed = confirm("No fields have been configured. Finalize anyway?");
+                if (!proceed) return;
+            }
+
+            try {
+                const resp = await fetch('/process', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ doc_id: currentDocId, selections: configuredSelections })
+                });
+
+                if (!resp.ok) throw new Error("Failed to process document");
+
+                const data = await resp.json();
+                alert("Document successfully finalized! Downloading templated document...");
+
+                if (data.download_url) {
+                    window.location.href = data.download_url;
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Error finalizing document.");
+            }
+        }
+
+        // --- Rendering ---
+
+        function createFormattedText(runs) {
+            if (!runs || runs.length === 0) return document.createTextNode("");
+
+            const container = document.createDocumentFragment();
+            runs.forEach(run => {
+                let span = document.createElement('span');
+                span.innerText = run.text;
+
+                if (run.formatting) {
+                    if (run.formatting.bold) span.style.fontWeight = 'bold';
+                    if (run.formatting.italic) span.style.fontStyle = 'italic';
+                    if (run.formatting.underline) span.style.textDecoration = 'underline';
+                }
+
+                container.appendChild(span);
+            });
+            return container;
+        }
+
+        function renderParagraph(p) {
+            const div = document.createElement('div');
+            div.id = p.id;
+            div.className = 'selectable mb-2 px-2 py-1 min-h-[1.5em]';
+
+            // Apply alignment
+            if (p.alignment) {
+                div.style.textAlign = p.alignment;
+            }
+
+            // Checkboxes
+            if (p.has_checkbox) {
+                div.innerHTML = `<span class="text-blue-600 font-bold mr-2">[Checkbox]</span>`;
+            }
+
+            // Runs formatting
+            if (p.runs && p.runs.length > 0) {
+                div.appendChild(createFormattedText(p.runs));
+            } else if (p.text) {
+                div.innerText = p.text;
+            } else if (p.is_blank) {
+                // Keep blank lines visible
+                div.innerHTML = '&nbsp;';
+            }
+
+            div.onclick = (e) => handleSelection(e, p.id);
+            return div;
+        }
+
+        function renderDocument(structure) {
+            els.docView.innerHTML = '';
+
+            const fragment = document.createDocumentFragment();
+
+            structure.paragraphs.forEach(p => {
+                fragment.appendChild(renderParagraph(p));
+            });
+
+            structure.tables.forEach(t => {
+                const tableWrapper = document.createElement('div');
+                tableWrapper.className = 'overflow-x-auto my-6';
+
+                const table = document.createElement('table');
+                table.id = t.id;
+                table.className = 'doc-table';
+
+                t.rows.forEach((row, rIdx) => {
+                    const tr = document.createElement('tr');
+
+                    row.forEach((cell, cIdx) => {
+                        const td = document.createElement('td');
+                        td.id = cell.id;
+                        td.className = 'selectable align-top';
+                        td.onclick = (e) => {
+                            e.stopPropagation();
+                            handleSelection(e, cell.id);
+                        };
+
+                        // Column selector on first row
+                        if (rIdx === 0) {
+                            const colBtn = document.createElement('div');
+                            colBtn.className = 'col-select-btn';
+                            colBtn.id = `${t.id}_colbtn_${cIdx}`;
+                            colBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>';
+                            colBtn.title = 'Select entire column';
+                            colBtn.onclick = (e) => {
+                                e.stopPropagation();
+                                handleColumnSelection(e, t.id, cIdx, t.rows.length);
+                            };
+                            td.appendChild(colBtn);
+                        }
+
+                        // Render cell content preserving paragraphs
+                        if (cell.paragraphs && cell.paragraphs.length > 0) {
+                            cell.paragraphs.forEach(cp => {
+                                const pDiv = document.createElement('div');
+                                pDiv.className = 'mb-1';
+                                if (cp.alignment) pDiv.style.textAlign = cp.alignment;
+
+                                if (cell.has_checkbox) {
+                                    pDiv.innerHTML += `<span class="text-blue-600 font-bold mr-1">[CB]</span>`;
+                                }
+
+                                if (cp.runs && cp.runs.length > 0) {
+                                    pDiv.appendChild(createFormattedText(cp.runs));
+                                } else {
+                                    pDiv.innerText = cp.text || '\u00A0';
+                                }
+                                td.appendChild(pDiv);
+                            });
+                        } else {
+                            if (cell.has_checkbox) {
+                                td.innerHTML = `<span class="text-blue-600 font-bold mr-1">[CB]</span>`;
+                            }
+                            td.appendChild(document.createTextNode(cell.text || '\u00A0'));
+                        }
+
+                        tr.appendChild(td);
+                    });
+                    table.appendChild(tr);
+                });
+
+                tableWrapper.appendChild(table);
+                fragment.appendChild(tableWrapper);
+            });
+
+            els.docView.appendChild(fragment);
+        }
+
+        // --- Selection Logic ---
+
+        function handleSelection(e, id) {
+            const isCtrl = e.ctrlKey || e.metaKey;
+            const isShift = e.shiftKey;
+
+            if (isShift && lastSelectedId) {
+                // Basic range selection logic (simplified to all elements between)
+                // In a real complex DOM this is tricky, we'll implement a basic version
+                const selectables = Array.from(document.querySelectorAll('.selectable'));
+                const startIdx = selectables.findIndex(el => el.id === lastSelectedId);
+                const endIdx = selectables.findIndex(el => el.id === id);
+
+                if (startIdx !== -1 && endIdx !== -1) {
+                    const min = Math.min(startIdx, endIdx);
+                    const max = Math.max(startIdx, endIdx);
+
+                    if (!isCtrl) clearSelection();
+
+                    for (let i = min; i <= max; i++) {
+                        addToSelection(selectables[i].id);
+                    }
+                }
+            } else if (isCtrl) {
+                if (selectedElements.has(id)) {
+                    removeFromSelection(id);
+                } else {
+                    addToSelection(id);
+                }
+            } else {
+                clearSelection();
+                addToSelection(id);
+            }
+
+            lastSelectedId = id;
+            updateSelectionUI();
+        }
+
+        function handleColumnSelection(e, tableId, colIdx, rowCount) {
+            const isCtrl = e.ctrlKey || e.metaKey;
+
+            // Create a virtual ID for column selection
+            const colId = `${tableId}_col_${colIdx}`;
+
+            if (!isCtrl) clearSelection();
+
+            if (selectedElements.has(colId)) {
+                selectedElements.delete(colId);
+                highlightColumn(tableId, colIdx, false);
+                document.getElementById(`${tableId}_colbtn_${colIdx}`).classList.remove('active');
+            } else {
+                selectedElements.add(colId);
+                highlightColumn(tableId, colIdx, true);
+                document.getElementById(`${tableId}_colbtn_${colIdx}`).classList.add('active');
+            }
+
+            lastSelectedId = colId;
+            updateSelectionUI();
+        }
+
+        function highlightColumn(tableId, colIdx, active) {
+            const table = document.getElementById(tableId);
+            if (!table) return;
+
+            for (let r = 0; r < table.rows.length; r++) {
+                const cell = table.rows[r].cells[colIdx];
+                if (cell) {
+                    if (active) cell.classList.add('selected');
+                    else cell.classList.remove('selected');
+                }
+            }
+        }
+
+        function addToSelection(id) {
+            selectedElements.add(id);
+            const el = document.getElementById(id);
+            if (el) el.classList.add('selected');
+        }
+
+        function removeFromSelection(id) {
+            selectedElements.delete(id);
+            const el = document.getElementById(id);
+            if (el) el.classList.remove('selected');
+        }
+
+        function clearSelection() {
+            selectedElements.forEach(id => {
+                if (id.includes('_col_')) {
+                    const parts = id.split('_col_');
+                    highlightColumn(parts[0], parseInt(parts[1]), false);
+                    const btn = document.getElementById(`${parts[0]}_colbtn_${parts[1]}`);
+                    if (btn) btn.classList.remove('active');
+                } else {
+                    const el = document.getElementById(id);
+                    if (el) el.classList.remove('selected');
+                }
+            });
+            selectedElements.clear();
+        }
+
+        function updateSelectionUI() {
+            els.selectionCount.innerText = selectedElements.size;
+
+            if (selectedElements.size > 0) {
+                els.selectionPanel.classList.remove('opacity-50', 'pointer-events-none');
+            } else {
+                els.selectionPanel.classList.add('opacity-50', 'pointer-events-none');
+            }
+
+            // Pre-fill modal if AI suggestion exists for the single selected item
+            if (selectedElements.size === 1) {
+                const singleId = Array.from(selectedElements)[0];
+                const suggestion = aiSuggestions.find(s => s.id === singleId);
+                if (suggestion) {
+                    els.modalVarName.value = suggestion.suggested_name;
+                } else {
+                    els.modalVarName.value = '';
+                }
+            } else {
+                els.modalVarName.value = '';
+            }
+            els.modalContext.value = '';
+        }
+
+        // --- AI Suggestions ---
+        function applyAiSuggestions() {
+            // Remove old badges
+            document.querySelectorAll('.ai-suggestion-badge').forEach(el => el.remove());
+
+            aiSuggestions.forEach(s => {
+                const el = document.getElementById(s.id);
+                if (el) {
+                    const badge = document.createElement('div');
+                    badge.className = 'ai-suggestion-badge';
+                    badge.innerText = s.suggested_name;
+                    // Add badge to element, but keep it out of the text flow
+                    el.style.position = 'relative';
+                    el.appendChild(badge);
+                }
+            });
+        }
+
+        // --- Modal Configuration ---
+        function openConfigModal() {
+            if (selectedElements.size === 0) return;
+
+            els.configModal.classList.remove('hidden');
+            els.configModal.classList.add('flex');
+
+            // Trigger animation
+            setTimeout(() => {
+                els.modalContent.classList.remove('scale-95', 'opacity-0');
+                els.modalContent.classList.add('scale-100', 'opacity-100');
+            }, 10);
+
+            els.modalVarName.focus();
+        }
+
+        function closeConfigModal() {
+            els.modalContent.classList.remove('scale-100', 'opacity-100');
+            els.modalContent.classList.add('scale-95', 'opacity-0');
+
+            setTimeout(() => {
+                els.configModal.classList.add('hidden');
+                els.configModal.classList.remove('flex');
+            }, 200);
+        }
+
+        function saveConfiguration() {
+            const varName = els.modalVarName.value.trim();
+            const context = els.modalContext.value.trim();
+
+            if (!varName) {
+                alert("Variable Name is required.");
+                els.modalVarName.focus();
+                return;
+            }
+
+            // Save for each selected element
+            selectedElements.forEach(id => {
+                // Check if replacing existing configuration
+                const existingIdx = configuredSelections.findIndex(s => s.id === id);
+                if (existingIdx >= 0) {
+                    configuredSelections.splice(existingIdx, 1);
+                }
+
+                configuredSelections.push({
+                    id: id,
+                    variable_name: varName,
+                    description: context
+                });
+
+                // Apply styling visually to document
+                if (id.includes('_col_')) {
+                    const parts = id.split('_col_');
+                    const tableId = parts[0];
+                    const colIdx = parseInt(parts[1]);
+
+                    const table = document.getElementById(tableId);
+                    if (table) {
+                        for (let r = 0; r < table.rows.length; r++) {
+                            const cell = table.rows[r].cells[colIdx];
+                            if (cell) cell.classList.add('configured');
+                        }
+                    }
+                    const btn = document.getElementById(`${tableId}_colbtn_${colIdx}`);
+                    if (btn) btn.classList.add('bg-green-500'); // Indicate configured
+                } else {
+                    const el = document.getElementById(id);
+                    if (el) el.classList.add('configured');
+                }
+            });
+
+            updateConfiguredListUI();
+            clearSelection();
+            updateSelectionUI();
+            closeConfigModal();
+        }
+
+        function updateConfiguredListUI() {
+            if (configuredSelections.length === 0) {
+                els.configuredList.innerHTML = '<p class="text-sm text-slate-400 italic">No fields configured yet.</p>';
+                return;
+            }
+
+            els.configuredList.innerHTML = '';
+
+            // Group by variable name just for display
+            const grouped = {};
+            configuredSelections.forEach(s => {
+                if (!grouped[s.variable_name]) grouped[s.variable_name] = [];
+                grouped[s.variable_name].push(s);
+            });
+
+            Object.keys(grouped).forEach(varName => {
+                const group = grouped[varName];
+                const count = group.length;
+
+                const item = document.createElement('div');
+                item.className = 'bg-white border border-slate-200 rounded p-3 shadow-sm';
+                item.innerHTML = `
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="font-mono text-sm text-blue-700 font-semibold truncate" title="${varName}">${varName}</span>
+                        <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">${count} el</span>
+                    </div>
+                    <p class="text-xs text-slate-500 line-clamp-2" title="${group[0].description || 'No description'}">
+                        ${group[0].description || '<span class="italic opacity-50">No description provided</span>'}
+                    </p>
+                `;
+                els.configuredList.appendChild(item);
+            });
+        }
+    </script>
+</body>
+</html>
