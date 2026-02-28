@@ -1,4 +1,4 @@
-from trafilatura import extract
+from trafilatura import extract, fetch_url
 import os
 import json
 from urllib.parse import urlencode
@@ -217,7 +217,7 @@ construction_hazards = [
     "rushed_work_activity"
 ]
 
-
+# Google API - Get search results. 
 
 GOOGLE_CSE_URL = "https://www.googleapis.com/customsearch/v1"
 
@@ -329,4 +329,19 @@ def discover_regulatory_urls(hazard_phrase: str, pages: int = 3):
                 seen.add(url)
                 out.append(hit)
     return out
+
+def get_plain_text_from_url():
+
+    #This is a temporary hazard phrase build a way for it to dynamically select the hazard
+    response_list = discover_regulatory_urls(hazard_phrase="")
+
+    all_text = []
+
+    for i in response_list:
+        url = fetch_url(i.get("url"))
+        
+        page_text = extract(url, output_format="json", include_comments=False)
+        all_text.append[page_text]
+    
+    return all_text
 
