@@ -1,4 +1,8 @@
 from trafilatura import extract
+import os
+import json
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 #TODO 
 # - get the job step 
@@ -214,4 +218,115 @@ construction_hazards = [
 ]
 
 
+
+GOOGLE_CSE_URL = "https://www.googleapis.com/customsearch/v1"
+
+def google_cse_search(query: str, *, start: int = 1, num: int = 10):
+    """
+    Run one Google Custom Search API request and normalize the response.
+
+    This function handles a single call to the CSE endpoint, using the API key
+    and search engine id from environment variables. It builds the request URL,
+    sends the HTTP request, decodes the JSON payload, and returns only the
+    fields we actually care about (`title`, `url`, and `snippet`).
+
+    The `start` value is 1-based because that is how Google indexes results.
+    The `num` value is capped at 10 because the API does not allow more than 10
+    results per request.
+
+    Args:
+        query: Search phrase that should be sent to Google CSE.
+        start: 1-based starting index for result paging. For example, `1` is
+            the first page and `11` is the second page when requesting 10 hits.
+        num: Desired number of results for this request. Anything over 10 will be set to 10
+
+    Returns:
+        list[dict]: A normalized list of search hits. Each hit has:
+            - `title`: Result title string (or `None` if missing)
+            - `url`: Result link string (or `None` if missing)
+            - `snippet`: Preview text string (or `None` if missing)
+
+    Raises:
+        KeyError: If `GOOGLE_CSE_API_KEY` or `GOOGLE_CSE_CX` is missing from
+            the environment.
+        urllib.error.URLError: If the network request fails or times out.
+        json.JSONDecodeError: If Google returns a response that is not valid
+            JSON.
+    """
+
+    ## TODO make these call from env variables.
+    api_key = os.environ["GOOGLE_CSE_API_KEY"]
+    cx = os.environ["GOOGLE_CSE_CX"]  # your programmable search engine id
+
+    params = {
+        "key": api_key,
+        "cx": cx,
+        "q": query,
+        # Note: googles indexing starts with 1.
+        "start": start,
+        # maximum of 10 results can be requested.     
+        "num": min(num, 10), 
+    }
+
+    # build the HTTP request object - headers are how google identifies debbie
+    request = Request(
+        f"{GOOGLE_CSE_URL}?{urlencode(params)}",
+        headers={"User-Agent": "Debbie/1.0"}
+    )
+
+    # this sends requests, it fails after 20 seconds of nothing.
+    with urlopen(request, timeout=20) as response:
+        #Reads the response as bytes and converts it to a python string - payload = dictionary with the api response
+        payload = json.loads(response.read().decode("utf-8"))
+
+    #build into a smaller normalized list - this will return a list of result objects from the search.
+    hits = []
+    for item in payload.get("items", []):
+        hits.append({
+            "title": item.get("title"),
+            "url": item.get("link"),
+            "snippet": item.get("snippet"),
+        })
+    return hits
+
+
+def discover_regulatory_urls(hazard_phrase: str, pages: int = 3):
+    """
+    Discover regulation-related URLs for one hazard phrase across CSE pages.
+
+    This function builds a regulation-focused query using the provided hazard
+    phrase, then requests multiple pages of Google CSE results. It makes sure that no duplicates are in the list.
+
+    Search behavior:
+    - Query format is: `"{hazard_phrase} regulation requirements"`.
+    - Each page request asks for up to 10 hits.
+    - `pages=3` means up to 30 raw hits are checked before deduplication.
+
+    Args:
+        hazard_phrase: Hazard keyword or short phrase to search for
+        pages: Number of CSE pages to scan. Each page is offset by 10 results.
+
+    Returns:
+        list[dict]: result objects from `google_cse_search`, in
+        the order they were discovered. Each item includes `title`, `url`, and
+        `snippet`. No Duplicates.
+    """
+    # your CSE should already be restricted to OSHA + selected domains
+
+    #builds the search string 
+    q = f"{hazard_phrase} regulation requirements"
+    # seen is the urls already encountered. out is final list of result objects
+    seen, out = set(), []
+
+    # Loop page by page and assumes 10 requests per result. returns a final list of requested pages without any duplicates. 
+    for i in range(pages):
+        start = 1 + i * 10
+        for hit in google_cse_search(q, start=start, num=10):
+            url = hit["url"]
+
+            #adds seen urls to the seen list 
+            if url and url not in seen:
+                seen.add(url)
+                out.append(hit)
+    return out
 
