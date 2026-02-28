@@ -1,0 +1,8 @@
+{
+  "main_model": {
+    "model": "gpt-5-nano-2025-08-07",
+    "temperature": 0.5,
+    "max_tokens": 2500,
+    "top_p": 1.0
+  }
+}
