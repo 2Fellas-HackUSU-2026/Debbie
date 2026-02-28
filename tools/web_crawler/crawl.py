@@ -4,6 +4,9 @@ import json
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+import re
+from typing import List, Dict, Optional
+
 #TODO 
 # - get the job step 
 # - Find relavent osha pages - bing search api??
@@ -311,8 +314,7 @@ def discover_regulatory_urls(hazard_phrase: str, pages: int = 3):
         the order they were discovered. Each item includes `title`, `url`, and
         `snippet`. No Duplicates.
     """
-    # your CSE should already be restricted to OSHA + selected domains
-
+    # CSE should already be restricted to OSHA + selected domains
     #builds the search string 
     q = f"{hazard_phrase} regulation requirements"
     # seen is the urls already encountered. out is final list of result objects
@@ -331,9 +333,24 @@ def discover_regulatory_urls(hazard_phrase: str, pages: int = 3):
     return out
 
 def get_plain_text_from_url():
+    """
+    Fetch search hits and extract plain text content from each result URL.
+
+    Current flow:
+    1. Calls `discover_regulatory_urls` to get candidate pages.
+    2. Fetches each page with `fetch_url`.
+    3. Extracts readable content with `trafilatura.extract`.
+    4. Collects extracted page text into a list and returns it.
+
+    This function is currently wired with an empty `hazard_phrase` and is
+    intended to be updated so hazard selection is dynamic.
+
+    Returns:
+        list: Extracted text payloads for each discovered URL.
+    """
 
     #This is a temporary hazard phrase build a way for it to dynamically select the hazard
-    response_list = discover_regulatory_urls(hazard_phrase="")
+    response_list = discover_regulatory_urls(hazard_phrase="slips, trips, and falls")
 
     all_text = []
 
@@ -341,7 +358,51 @@ def get_plain_text_from_url():
         url = fetch_url(i.get("url"))
         
         page_text = extract(url, output_format="json", include_comments=False)
-        all_text.append[page_text]
+        all_text.append(page_text)
     
     return all_text
 
+def chunk_text(
+    text: str,
+    chunk_size_words: int = 700,
+    overlap_words: int = 80,
+    source_url: Optional[str] = None,
+) -> List[Dict]:
+    """
+    Split text into overlapping word chunks.
+    Returns: [{"chunk_id", "text", "word_start", "word_end", "source_url"}, ...]
+    """
+    if chunk_size_words <= 0:
+        raise ValueError("chunk_size_words must be > 0")
+    if overlap_words < 0 or overlap_words >= chunk_size_words:
+        raise ValueError("overlap_words must be >= 0 and < chunk_size_words")
+
+    # Collapse whitespace and tokenize by words
+    words = re.findall(r"\S+", text or "")
+    if not words:
+        return []
+
+    chunks = []
+    start = 0
+    chunk_id = 0
+
+    while start < len(words):
+        end = min(start + chunk_size_words, len(words))
+        chunk_words = words[start:end]
+
+        chunks.append({
+            "chunk_id": chunk_id,
+            "text": " ".join(chunk_words),
+            "word_start": start,
+            "word_end": end,
+            "source_url": source_url,
+        })
+
+        if end >= len(words):
+            break
+
+        # overlap: next chunk backs up by overlap_words
+        start = end - overlap_words
+        chunk_id += 1
+
+    return chunks
