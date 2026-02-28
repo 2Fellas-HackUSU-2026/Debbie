@@ -369,14 +369,6 @@ async def process_document(request: ProcessRequest):
     with open(data_json_path, "w") as f:
         json.dump(data_dict, f, indent=4)
 
-    # Clean up upload files
-    try:
-        os.remove(doc_path)
-        if request.doc_id in document_structures:
-            del document_structures[request.doc_id]
-    except Exception:
-        pass
-
     return {"message": "Document processed and saved to data/doc_template.docx", "mapping": data_dict}
 
 
