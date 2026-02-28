@@ -14,9 +14,6 @@ SYSTEM_PROMPT = """
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "main_agent.json"
 
 
-
-
-
 #create config dictionary
 with open(CONFIG_PATH, "r") as f:
     config = json.load(f)
