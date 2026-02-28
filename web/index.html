@@ -89,35 +89,33 @@
 
         .col-select-btn {
             position: absolute;
-            top: -24px;
+            top: -30px;
             left: 50%;
             transform: translateX(-50%);
-            width: 20px;
-            height: 20px;
-            background-color: #94a3b8;
+            width: 28px;
+            height: 28px;
+            background-color: #3b82f6;
             color: white;
-            border-radius: 9999px;
+            border-radius: 6px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 12px;
+            font-weight: bold;
             cursor: pointer;
-            opacity: 0;
-            transition: opacity 0.2s, background-color 0.2s;
-            z-index: 10;
-        }
-
-        table.doc-table td:hover .col-select-btn {
             opacity: 1;
+            transition: all 0.2s;
+            z-index: 10;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.15);
         }
 
         .col-select-btn:hover {
-            background-color: #475569;
+            background-color: #2563eb;
+            transform: translateX(-50%) scale(1.1);
         }
 
         .col-select-btn.active {
-            opacity: 1;
-            background-color: #3b82f6;
+            background-color: #22c55e;
         }
 
         /* Suggestion Badge */
@@ -163,10 +161,6 @@
         </div>
 
         <div id="header-actions" class="hidden flex items-center gap-4">
-            <button id="ai-suggest-btn" class="flex items-center gap-2 bg-amber-100 text-amber-700 hover:bg-amber-200 px-4 py-2 rounded-md font-medium text-sm transition-colors border border-amber-200" onclick="generateSuggestions()">
-                <i data-lucide="sparkles" class="w-4 h-4"></i>
-                <span id="ai-btn-text">AI Suggestions</span>
-            </button>
             <button class="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-md font-medium text-sm transition-colors shadow-sm" onclick="finalizeDocument()">
                 <i data-lucide="check-circle" class="w-4 h-4"></i>
                 Finalize Document
@@ -184,7 +178,6 @@
                 <p class="text-sm text-slate-500 mb-4">Select text, checkboxes, or table cells to configure fields.</p>
                 <div class="text-xs text-slate-500 flex flex-col gap-2">
                     <div class="flex items-center gap-2"><kbd class="bg-white border border-slate-300 px-1 rounded shadow-sm text-slate-700 font-mono">Ctrl</kbd> + Click to multi-select</div>
-                    <div class="flex items-center gap-2"><kbd class="bg-white border border-slate-300 px-1 rounded shadow-sm text-slate-700 font-mono">Shift</kbd> + Click for range select</div>
                 </div>
             </div>
 
@@ -192,6 +185,13 @@
                 <div class="flex items-center justify-between mb-3">
                     <h3 class="font-semibold text-slate-800">Selected Elements</h3>
                     <span id="selection-count" class="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded-full">0</span>
+                </div>
+
+                <div id="table-selection-actions" class="hidden mb-3">
+                    <button onclick="selectCurrentColumn()" class="w-full bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 py-2.5 rounded-md font-medium text-sm transition-colors flex justify-center items-center gap-2">
+                        <i data-lucide="layout-grid" class="w-4 h-4"></i>
+                        Select Entire Column
+                    </button>
                 </div>
 
                 <button onclick="openConfigModal()" class="w-full bg-slate-800 hover:bg-slate-900 text-white py-2.5 rounded-md font-medium text-sm transition-colors flex justify-center items-center gap-2">
@@ -256,11 +256,11 @@
                 </button>
             </div>
 
-            <div class="p-6">
+             <div class="p-6">
                 <div class="mb-5">
                     <label class="block text-sm font-medium text-slate-700 mb-1">Variable Name</label>
-                    <input type="text" id="modalVarName" class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="e.g. project_name" autocomplete="off">
-                    <p class="text-xs text-slate-500 mt-1">This will be used as the key in your JSON mapping.</p>
+                    <input type="text" id="modalVarName" class="w-full border border-slate-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="e.g. project_name" autocomplete="off" onkeydown="preventPipeCharacter(event)">
+                    <p class="text-xs text-slate-500 mt-1">This will be used as the key in your JSON mapping. (Pipe character | not allowed)</p>
                 </div>
 
                 <div class="mb-2">
@@ -269,535 +269,34 @@
                 </div>
             </div>
 
-            <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
-                <button onclick="closeConfigModal()" class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-md transition-colors">Cancel</button>
-                <button onclick="saveConfiguration()" class="px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow-sm transition-colors">Save Field</button>
+            <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-between gap-3">
+                <button onclick="generateAISuggestion()" class="px-4 py-2 text-sm font-medium text-amber-700 bg-amber-100 hover:bg-amber-200 rounded-md transition-colors border border-amber-200 flex items-center gap-2">
+                    <i data-lucide="sparkles" class="w-4 h-4"></i>
+                    <span>AI Suggest</span>
+                </button>
+                <div class="flex gap-3">
+                    <button onclick="closeConfigModal()" class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-md transition-colors">Cancel</button>
+                    <button onclick="saveConfiguration()" class="px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-md shadow-sm transition-colors">Save Field</button>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Initialization Scripts -->
-    <script>
-        // Initialize Lucide icons
-        lucide.createIcons();
-
-        // Application State
-        let currentDocId = null;
-        let selectedElements = new Set();
-        let lastSelectedId = null; // For shift-click range selection
-        let documentStructure = null;
-        let configuredSelections = []; // { id, variable_name, description, is_column }
-        let aiSuggestions = [];
-
-        // --- DOM Elements ---
-        const els = {
-            uploadSection: document.getElementById('upload-section'),
-            uploadLoading: document.getElementById('upload-loading'),
-            sidebar: document.getElementById('sidebar'),
-            docView: document.getElementById('document-view'),
-            headerActions: document.getElementById('header-actions'),
-            selectionPanel: document.getElementById('selection-panel'),
-            selectionCount: document.getElementById('selection-count'),
-            configuredList: document.getElementById('configured-fields-list'),
-            configModal: document.getElementById('config-modal'),
-            modalContent: document.getElementById('modal-content'),
-            modalVarName: document.getElementById('modalVarName'),
-            modalContext: document.getElementById('modalContext'),
-            aiBtn: document.getElementById('ai-suggest-btn'),
-            aiBtnText: document.getElementById('ai-btn-text'),
-        };
-
-        // --- API Interactions ---
-        async function uploadFile() {
-            const fileInput = document.getElementById('fileInput');
-            if (!fileInput.files[0]) return;
-
-            els.uploadLoading.classList.remove('hidden');
-
-            const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
-
-            try {
-                const resp = await fetch('/upload', { method: 'POST', body: formData });
-                if (!resp.ok) throw new Error('Upload failed');
-
-                const data = await resp.json();
-                currentDocId = data.doc_id;
-                documentStructure = data.structure;
-
-                renderDocument(documentStructure);
-
-                // Switch UI state
-                els.uploadLoading.classList.add('hidden');
-                els.uploadSection.classList.add('hidden');
-                els.docView.classList.remove('hidden');
-                els.sidebar.classList.remove('hidden');
-                els.headerActions.classList.remove('hidden');
-            } catch (err) {
-                console.error(err);
-                alert("Failed to upload document. Ensure it's a valid .docx file.");
-                els.uploadLoading.classList.add('hidden');
-            }
-        }
-
-        async function generateSuggestions() {
-            if (!currentDocId) return;
-
-            // Set loading state
-            els.aiBtn.disabled = true;
-            els.aiBtn.classList.remove('bg-amber-100', 'text-amber-700', 'hover:bg-amber-200');
-            els.aiBtn.classList.add('bg-slate-100', 'text-slate-500');
-            els.aiBtn.innerHTML = `
-                <i data-lucide="loader-2" class="w-4 h-4 spinner"></i>
-                <span>Generating...</span>
-            `;
-            lucide.createIcons();
-
-            try {
-                const resp = await fetch(`/suggest/${currentDocId}`);
-                const data = await resp.json();
-                aiSuggestions = data.suggestions || [];
-
-                applyAiSuggestions();
-
-                // Set success state
-                els.aiBtn.classList.remove('bg-slate-100', 'text-slate-500');
-                els.aiBtn.classList.add('bg-green-100', 'text-green-700');
-                els.aiBtn.innerHTML = `
-                    <i data-lucide="check" class="w-4 h-4"></i>
-                    <span>Suggestions Loaded</span>
-                `;
-                lucide.createIcons();
-
-                // Reset button after 3 seconds
-                setTimeout(() => {
-                    els.aiBtn.disabled = false;
-                    els.aiBtn.classList.remove('bg-green-100', 'text-green-700');
-                    els.aiBtn.classList.add('bg-amber-100', 'text-amber-700', 'hover:bg-amber-200');
-                    els.aiBtn.innerHTML = `
-                        <i data-lucide="sparkles" class="w-4 h-4"></i>
-                        <span>AI Suggestions</span>
-                    `;
-                    lucide.createIcons();
-                }, 3000);
-
-            } catch (err) {
-                console.error(err);
-                alert("Failed to generate AI suggestions.");
-                els.aiBtn.disabled = false;
-            }
-        }
-
-        async function finalizeDocument() {
-            if (!currentDocId) return;
-            if (configuredSelections.length === 0) {
-                const proceed = confirm("No fields have been configured. Finalize anyway?");
-                if (!proceed) return;
-            }
-
-            try {
-                const resp = await fetch('/process', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ doc_id: currentDocId, selections: configuredSelections })
-                });
-
-                if (!resp.ok) throw new Error("Failed to process document");
-
-                const data = await resp.json();
-                alert("Document successfully finalized! Downloading templated document...");
-
-                if (data.download_url) {
-                    window.location.href = data.download_url;
-                }
-            } catch (err) {
-                console.error(err);
-                alert("Error finalizing document.");
-            }
-        }
-
-        // --- Rendering ---
-
-        function createFormattedText(runs) {
-            if (!runs || runs.length === 0) return document.createTextNode("");
-
-            const container = document.createDocumentFragment();
-            runs.forEach(run => {
-                let span = document.createElement('span');
-                span.innerText = run.text;
-
-                if (run.formatting) {
-                    if (run.formatting.bold) span.style.fontWeight = 'bold';
-                    if (run.formatting.italic) span.style.fontStyle = 'italic';
-                    if (run.formatting.underline) span.style.textDecoration = 'underline';
-                }
-
-                container.appendChild(span);
-            });
-            return container;
-        }
-
-        function renderParagraph(p) {
-            const div = document.createElement('div');
-            div.id = p.id;
-            div.className = 'selectable mb-2 px-2 py-1 min-h-[1.5em]';
-
-            // Apply alignment
-            if (p.alignment) {
-                div.style.textAlign = p.alignment;
-            }
-
-            // Checkboxes
-            if (p.has_checkbox) {
-                div.innerHTML = `<span class="text-blue-600 font-bold mr-2">[Checkbox]</span>`;
-            }
-
-            // Runs formatting
-            if (p.runs && p.runs.length > 0) {
-                div.appendChild(createFormattedText(p.runs));
-            } else if (p.text) {
-                div.innerText = p.text;
-            } else if (p.is_blank) {
-                // Keep blank lines visible
-                div.innerHTML = '&nbsp;';
-            }
-
-            div.onclick = (e) => handleSelection(e, p.id);
-            return div;
-        }
-
-        function renderDocument(structure) {
-            els.docView.innerHTML = '';
-
-            const fragment = document.createDocumentFragment();
-
-            structure.paragraphs.forEach(p => {
-                fragment.appendChild(renderParagraph(p));
-            });
-
-            structure.tables.forEach(t => {
-                const tableWrapper = document.createElement('div');
-                tableWrapper.className = 'overflow-x-auto my-6';
-
-                const table = document.createElement('table');
-                table.id = t.id;
-                table.className = 'doc-table';
-
-                t.rows.forEach((row, rIdx) => {
-                    const tr = document.createElement('tr');
-
-                    row.forEach((cell, cIdx) => {
-                        const td = document.createElement('td');
-                        td.id = cell.id;
-                        td.className = 'selectable align-top';
-                        td.onclick = (e) => {
-                            e.stopPropagation();
-                            handleSelection(e, cell.id);
-                        };
-
-                        // Column selector on first row
-                        if (rIdx === 0) {
-                            const colBtn = document.createElement('div');
-                            colBtn.className = 'col-select-btn';
-                            colBtn.id = `${t.id}_colbtn_${cIdx}`;
-                            colBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>';
-                            colBtn.title = 'Select entire column';
-                            colBtn.onclick = (e) => {
-                                e.stopPropagation();
-                                handleColumnSelection(e, t.id, cIdx, t.rows.length);
-                            };
-                            td.appendChild(colBtn);
-                        }
-
-                        // Render cell content preserving paragraphs
-                        if (cell.paragraphs && cell.paragraphs.length > 0) {
-                            cell.paragraphs.forEach(cp => {
-                                const pDiv = document.createElement('div');
-                                pDiv.className = 'mb-1';
-                                if (cp.alignment) pDiv.style.textAlign = cp.alignment;
-
-                                if (cell.has_checkbox) {
-                                    pDiv.innerHTML += `<span class="text-blue-600 font-bold mr-1">[CB]</span>`;
-                                }
-
-                                if (cp.runs && cp.runs.length > 0) {
-                                    pDiv.appendChild(createFormattedText(cp.runs));
-                                } else {
-                                    pDiv.innerText = cp.text || '\u00A0';
-                                }
-                                td.appendChild(pDiv);
-                            });
-                        } else {
-                            if (cell.has_checkbox) {
-                                td.innerHTML = `<span class="text-blue-600 font-bold mr-1">[CB]</span>`;
-                            }
-                            td.appendChild(document.createTextNode(cell.text || '\u00A0'));
-                        }
-
-                        tr.appendChild(td);
-                    });
-                    table.appendChild(tr);
-                });
-
-                tableWrapper.appendChild(table);
-                fragment.appendChild(tableWrapper);
-            });
-
-            els.docView.appendChild(fragment);
-        }
-
-        // --- Selection Logic ---
-
-        function handleSelection(e, id) {
-            const isCtrl = e.ctrlKey || e.metaKey;
-            const isShift = e.shiftKey;
-
-            if (isShift && lastSelectedId) {
-                // Basic range selection logic (simplified to all elements between)
-                // In a real complex DOM this is tricky, we'll implement a basic version
-                const selectables = Array.from(document.querySelectorAll('.selectable'));
-                const startIdx = selectables.findIndex(el => el.id === lastSelectedId);
-                const endIdx = selectables.findIndex(el => el.id === id);
-
-                if (startIdx !== -1 && endIdx !== -1) {
-                    const min = Math.min(startIdx, endIdx);
-                    const max = Math.max(startIdx, endIdx);
-
-                    if (!isCtrl) clearSelection();
-
-                    for (let i = min; i <= max; i++) {
-                        addToSelection(selectables[i].id);
-                    }
-                }
-            } else if (isCtrl) {
-                if (selectedElements.has(id)) {
-                    removeFromSelection(id);
-                } else {
-                    addToSelection(id);
-                }
-            } else {
-                clearSelection();
-                addToSelection(id);
-            }
-
-            lastSelectedId = id;
-            updateSelectionUI();
-        }
-
-        function handleColumnSelection(e, tableId, colIdx, rowCount) {
-            const isCtrl = e.ctrlKey || e.metaKey;
-
-            // Create a virtual ID for column selection
-            const colId = `${tableId}_col_${colIdx}`;
-
-            if (!isCtrl) clearSelection();
-
-            if (selectedElements.has(colId)) {
-                selectedElements.delete(colId);
-                highlightColumn(tableId, colIdx, false);
-                document.getElementById(`${tableId}_colbtn_${colIdx}`).classList.remove('active');
-            } else {
-                selectedElements.add(colId);
-                highlightColumn(tableId, colIdx, true);
-                document.getElementById(`${tableId}_colbtn_${colIdx}`).classList.add('active');
-            }
-
-            lastSelectedId = colId;
-            updateSelectionUI();
-        }
-
-        function highlightColumn(tableId, colIdx, active) {
-            const table = document.getElementById(tableId);
-            if (!table) return;
-
-            for (let r = 0; r < table.rows.length; r++) {
-                const cell = table.rows[r].cells[colIdx];
-                if (cell) {
-                    if (active) cell.classList.add('selected');
-                    else cell.classList.remove('selected');
-                }
-            }
-        }
-
-        function addToSelection(id) {
-            selectedElements.add(id);
-            const el = document.getElementById(id);
-            if (el) el.classList.add('selected');
-        }
-
-        function removeFromSelection(id) {
-            selectedElements.delete(id);
-            const el = document.getElementById(id);
-            if (el) el.classList.remove('selected');
-        }
-
-        function clearSelection() {
-            selectedElements.forEach(id => {
-                if (id.includes('_col_')) {
-                    const parts = id.split('_col_');
-                    highlightColumn(parts[0], parseInt(parts[1]), false);
-                    const btn = document.getElementById(`${parts[0]}_colbtn_${parts[1]}`);
-                    if (btn) btn.classList.remove('active');
-                } else {
-                    const el = document.getElementById(id);
-                    if (el) el.classList.remove('selected');
-                }
-            });
-            selectedElements.clear();
-        }
-
-        function updateSelectionUI() {
-            els.selectionCount.innerText = selectedElements.size;
-
-            if (selectedElements.size > 0) {
-                els.selectionPanel.classList.remove('opacity-50', 'pointer-events-none');
-            } else {
-                els.selectionPanel.classList.add('opacity-50', 'pointer-events-none');
-            }
-
-            // Pre-fill modal if AI suggestion exists for the single selected item
-            if (selectedElements.size === 1) {
-                const singleId = Array.from(selectedElements)[0];
-                const suggestion = aiSuggestions.find(s => s.id === singleId);
-                if (suggestion) {
-                    els.modalVarName.value = suggestion.suggested_name;
-                } else {
-                    els.modalVarName.value = '';
-                }
-            } else {
-                els.modalVarName.value = '';
-            }
-            els.modalContext.value = '';
-        }
-
-        // --- AI Suggestions ---
-        function applyAiSuggestions() {
-            // Remove old badges
-            document.querySelectorAll('.ai-suggestion-badge').forEach(el => el.remove());
-
-            aiSuggestions.forEach(s => {
-                const el = document.getElementById(s.id);
-                if (el) {
-                    const badge = document.createElement('div');
-                    badge.className = 'ai-suggestion-badge';
-                    badge.innerText = s.suggested_name;
-                    // Add badge to element, but keep it out of the text flow
-                    el.style.position = 'relative';
-                    el.appendChild(badge);
-                }
-            });
-        }
-
-        // --- Modal Configuration ---
-        function openConfigModal() {
-            if (selectedElements.size === 0) return;
-
-            els.configModal.classList.remove('hidden');
-            els.configModal.classList.add('flex');
-
-            // Trigger animation
-            setTimeout(() => {
-                els.modalContent.classList.remove('scale-95', 'opacity-0');
-                els.modalContent.classList.add('scale-100', 'opacity-100');
-            }, 10);
-
-            els.modalVarName.focus();
-        }
-
-        function closeConfigModal() {
-            els.modalContent.classList.remove('scale-100', 'opacity-100');
-            els.modalContent.classList.add('scale-95', 'opacity-0');
-
-            setTimeout(() => {
-                els.configModal.classList.add('hidden');
-                els.configModal.classList.remove('flex');
-            }, 200);
-        }
-
-        function saveConfiguration() {
-            const varName = els.modalVarName.value.trim();
-            const context = els.modalContext.value.trim();
-
-            if (!varName) {
-                alert("Variable Name is required.");
-                els.modalVarName.focus();
-                return;
-            }
-
-            // Save for each selected element
-            selectedElements.forEach(id => {
-                // Check if replacing existing configuration
-                const existingIdx = configuredSelections.findIndex(s => s.id === id);
-                if (existingIdx >= 0) {
-                    configuredSelections.splice(existingIdx, 1);
-                }
-
-                configuredSelections.push({
-                    id: id,
-                    variable_name: varName,
-                    description: context
-                });
-
-                // Apply styling visually to document
-                if (id.includes('_col_')) {
-                    const parts = id.split('_col_');
-                    const tableId = parts[0];
-                    const colIdx = parseInt(parts[1]);
-
-                    const table = document.getElementById(tableId);
-                    if (table) {
-                        for (let r = 0; r < table.rows.length; r++) {
-                            const cell = table.rows[r].cells[colIdx];
-                            if (cell) cell.classList.add('configured');
-                        }
-                    }
-                    const btn = document.getElementById(`${tableId}_colbtn_${colIdx}`);
-                    if (btn) btn.classList.add('bg-green-500'); // Indicate configured
-                } else {
-                    const el = document.getElementById(id);
-                    if (el) el.classList.add('configured');
-                }
-            });
-
-            updateConfiguredListUI();
-            clearSelection();
-            updateSelectionUI();
-            closeConfigModal();
-        }
-
-        function updateConfiguredListUI() {
-            if (configuredSelections.length === 0) {
-                els.configuredList.innerHTML = '<p class="text-sm text-slate-400 italic">No fields configured yet.</p>';
-                return;
-            }
-
-            els.configuredList.innerHTML = '';
-
-            // Group by variable name just for display
-            const grouped = {};
-            configuredSelections.forEach(s => {
-                if (!grouped[s.variable_name]) grouped[s.variable_name] = [];
-                grouped[s.variable_name].push(s);
-            });
-
-            Object.keys(grouped).forEach(varName => {
-                const group = grouped[varName];
-                const count = group.length;
-
-                const item = document.createElement('div');
-                item.className = 'bg-white border border-slate-200 rounded p-3 shadow-sm';
-                item.innerHTML = `
-                    <div class="flex items-center justify-between mb-1">
-                        <span class="font-mono text-sm text-blue-700 font-semibold truncate" title="${varName}">${varName}</span>
-                        <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">${count} el</span>
-                    </div>
-                    <p class="text-xs text-slate-500 line-clamp-2" title="${group[0].description || 'No description'}">
-                        ${group[0].description || '<span class="italic opacity-50">No description provided</span>'}
-                    </p>
-                `;
-                els.configuredList.appendChild(item);
-            });
-        }
-    </script>
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+        <div id="toast-content" class="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4 transform scale-95 opacity-0 transition-all">
+            <div class="flex items-center gap-4">
+                <div id="toast-icon" class="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center"></div>
+                <div class="flex-1">
+                    <h3 id="toast-title" class="font-semibold text-lg"></h3>
+                    <p id="toast-message" class="text-sm text-slate-500 mt-1"></p>
+                </div>
+            </div>
+            <div id="toast-actions" class="mt-4 flex justify-end gap-3"></div>
+        </div>
+    </div>
+
+    <!-- External JavaScript -->
+    <script src="/static/app.js"></script>
 </body>
 </html>
